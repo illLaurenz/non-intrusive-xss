@@ -1,28 +1,12 @@
 import uuid
 from typing import Callable
-
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
 from selenium import webdriver
-from selenium.webdriver.common.by import By
+
+from bwapp_selenium_actions import *
 
 URL = "http://127.0.0.1:4040/bWAPP/"
-
-def xss_reflected_get_firstname(driver: webdriver, payload: str) -> str:
-    path = "xss_get.php"
-    driver.get(URL + path)
-    driver.find_element(By.ID, "firstname").send_keys(payload)
-    driver.find_element(By.ID, "lastname").send_keys("test")
-    driver.find_element(By.NAME, 'form').click()
-    html = driver.page_source
-    return html
-
-def login(driver):
-    path = "login.php"
-    driver.get(URL + path)
-    driver.find_element(By.NAME, "login").send_keys("bee")
-    driver.find_element(By.NAME, "password").send_keys("bug")
-    driver.find_element(By.NAME, 'form').click()
 
 def print_diff(diff: DeepDiff):
     print(diff.keys())
@@ -53,16 +37,16 @@ def compare_diffs(diff_payload: DeepDiff, diff_expected: DeepDiff):
             result[key] = set(diff_expected[key].keys())
     return result
 
-def single_experiment(driver: webdriver, payloads: list[str], experiment_function: Callable[[webdriver, str], str]) -> any:
+def single_experiment(driver: webdriver, payloads: list[str], experiment_function: Callable[[webdriver, str, str], str]) -> any:
     # set login cookie for driver
-    login(driver)
+    login(driver, URL)
 
     # test which differences appear when the payload changes between "normal" strings
     uuid_1 = str(uuid.uuid4())
     uuid_2 = str(uuid.uuid4())
     while uuid_1 == uuid_2: uuid_1 = str(uuid.uuid4())
-    html_uuid_1 = experiment_function(driver, uuid_1)
-    html_uuid_2 = experiment_function(driver, uuid_2)
+    html_uuid_1 = experiment_function(driver, URL, uuid_1)
+    html_uuid_2 = experiment_function(driver, URL, uuid_2)
     soup_uuid_1 = BeautifulSoup(html_uuid_1, "html.parser")
     soup_uuid_2 = BeautifulSoup(html_uuid_2, "html.parser")
 
@@ -72,7 +56,7 @@ def single_experiment(driver: webdriver, payloads: list[str], experiment_functio
 
     # generate diffs for each payload and compare to the expected diff, save differences
     for payload in payloads:
-        html_payload = experiment_function(driver, payload)
+        html_payload = experiment_function(driver, URL, payload)
         soup_payload = BeautifulSoup(html_payload, "html.parser")
         diff_payload = DeepDiff(soup_uuid_1, soup_payload)
         results[payload] = compare_diffs(diff_payload, expected_diff)
