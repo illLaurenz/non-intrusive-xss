@@ -1,0 +1,5 @@
+beautifulsoup4
+deepdiff
+selenium
+selenium-wire
+blinker==1.7.0
