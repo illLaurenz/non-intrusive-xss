@@ -9,5 +9,6 @@ CREATE TABLE xss (
     payload TEXT,
     attacked_path TEXT,
     impact TEXT,
-    works BOOL
+    works BOOL,
+    repeated_execution BOOL
 );

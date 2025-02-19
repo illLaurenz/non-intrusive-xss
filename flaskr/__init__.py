@@ -33,11 +33,20 @@ def create_app(test_config=None):
 
     @app.route("/submit/<identifier>")
     def submit(identifier):
+        identifier = int(identifier)
         database = db.get_db()
-        # database.execute("UPDATE xss SET impact = true WHERE id = ?", (identifier,))
-        database.execute("INSERT INTO xss (payload, attacked_path, impact, works) VALUES (?, ?, ?, ?)", ('alert(1)', '/path.php', 'impactful', True))
+        cur = database.execute("SELECT id, works FROM xss WHERE id = ?", (identifier,))
+        obj = cur.fetchone()
+        if obj is not None:
+            if obj[1]:
+                database.execute("UPDATE xss SET repeated_execution = true WHERE id = ?", (identifier,))
+            else:
+                database.execute("UPDATE xss SET works = true WHERE id = ?", (identifier,))
+        else:
+            database.execute("INSERT INTO xss (id, payload, attacked_path, impact, works) VALUES (?, ?, ?, ?)", (identifier, 'unknown payload', 'unknown path', 'unknown impact', True))
         database.commit()
-        return f"Hello, World! {identifier}"
+        db.close_db(database)
+        return
 
     @app.route("/results")
     def results():

