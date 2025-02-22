@@ -1,2 +1,4 @@
 flask --app flaskr init-db
 flask --app flaskr run --debug
+CREATE USER xss WITH CREATEDB PASSWORD 'xss';
+CREATE DATABASE xss_db OWNER = xss;

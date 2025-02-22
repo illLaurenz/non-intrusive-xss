@@ -1,0 +1,3 @@
+# conflicting with blinker 1.7, needs seperate env
+flask
+psycopg2

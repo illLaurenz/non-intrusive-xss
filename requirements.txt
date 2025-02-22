@@ -1,5 +1,9 @@
+# conflict blinker 1.7 with flask, requires 2 seperate environments
 beautifulsoup4
 deepdiff
 selenium
 selenium-wire
 blinker==1.7.0
+psycopg2
+numpy
+opencv-python

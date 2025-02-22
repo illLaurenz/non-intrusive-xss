@@ -1,7 +1,7 @@
 import random
 import os
 
-URL = "http://127.0.0.1:4040/bWAPP/"
+URL = "http://127.0.0.1:4040/"
 
 CALLBACK_URLs = [
     f'"{URL}"',

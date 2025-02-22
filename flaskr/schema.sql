@@ -4,8 +4,8 @@
 DROP TABLE IF EXISTS xss;
 DROP TABLE IF EXISTS post;
 
-CREATE TABLE xss (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE xss_eval (
+    id serial PRIMARY KEY,
     payload TEXT,
     attacked_path TEXT,
     impact TEXT,
