@@ -3,10 +3,9 @@ from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
 from seleniumwire import webdriver
+from payloads import *
 
 from bwapp_selenium_actions import *
-
-URL = "http://127.0.0.1:4040/bWAPP/"
 
 def print_diff(diff: DeepDiff):
     print(diff.keys())
