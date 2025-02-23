@@ -1,5 +1,5 @@
 import os
-
+import psycopg2
 from flask import Flask
 
 
@@ -26,34 +26,36 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    # register the database commands
-    from . import db
-
-    db.init_app(app)
+    conn = psycopg2.connect(
+        host="localhost",
+        port="8080",
+        database="xss_db",
+        user="xss",
+        password="xss"
+    )
 
     @app.route("/submit/<identifier>")
     def submit(identifier):
         identifier = int(identifier)
-        database = db.get_db()
-        cur = database.execute("SELECT id, works FROM xss WHERE id = ?", (identifier,))
-        obj = cur.fetchone()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, works FROM xss_eval WHERE id = %s", (identifier,))
+        obj = cursor.fetchone()
         if obj is not None:
             if obj[1]:
-                database.execute("UPDATE xss SET repeated_execution = true WHERE id = ?", (identifier,))
+                cursor.execute("UPDATE xss_eval SET repeated_execution = true WHERE id = %s", (identifier,))
             else:
-                database.execute("UPDATE xss SET works = true WHERE id = ?", (identifier,))
+                cursor.execute("UPDATE xss_eval SET works = true WHERE id = %s", (identifier,))
         else:
-            database.execute("INSERT INTO xss (id, payload, attacked_path, impact, works) VALUES (?, ?, ?, ?)", (identifier, 'unknown payload', 'unknown path', 'unknown impact', True))
-        database.commit()
-        db.close_db(database)
-        return
+            cursor.execute("INSERT INTO xss_eval (id, payload, attacked_path, impact, works) VALUES (%s, %s, %s, %s)", (identifier, 'unknown payload', 'unknown path', 'unknown impact', True))
+        conn.commit()
+        return "OK"
 
     @app.route("/results")
     def results():
-        database = db.get_db()
-        cur = database.execute("SELECT * FROM xss")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM xss_eval")
         result = "Entries: \n"
-        for row in cur.fetchall():
+        for row in cursor.fetchall():
             result += f"{row[0], row[1], row[2], row[3]}\n"
         return result
     return app
