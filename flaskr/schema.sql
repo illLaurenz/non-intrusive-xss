@@ -7,7 +7,13 @@ CREATE TABLE xss_eval (
     id serial PRIMARY KEY,
     payload TEXT,
     attacked_path TEXT,
-    impact TEXT,
-    works BOOL,
-    repeated_execution BOOL
+    structural_impact TEXT,
+    console_out TEXT,
+    structural_score FLOAT,
+    img_score FLOAT,
+    js_score FLOAT,
+    response_code_score FLOAT,
+    overall_score FLOAT,
+    works BOOL default FALSE,
+    repeated_execution BOOL default FALSE
 );

@@ -1,11 +1,12 @@
 import psycopg2
+from config import *
 
 conn = psycopg2.connect(
-        host="localhost",
-        port="8080",
-        database="xss_db",
-        user="xss",
-        password="xss"
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS
 )
 
 # Open a cursor to perform database operations

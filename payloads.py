@@ -1,18 +1,17 @@
 import random
 import os
-
-URL = "http://127.0.0.1:4040/"
+from config import *
 
 CALLBACK_URLs = [
-    f'"{URL}"',
-    f"'{URL}'",
-    f"`{URL}`"
+    f'"{BWAPP_URL}"',
+    f"'{BWAPP_URL}'",
+    f"`{BWAPP_URL}`"
 ]
 
 CALLBACKs = [
-    f'import("{URL}")',
-    f"import('{URL}')",
-    f"import(`{URL}`)"
+    f'import("{BWAPP_URL}")',
+    f"import('{BWAPP_URL}')",
+    f"import(`{BWAPP_URL}`)"
 ]
 
 xssTokens = {

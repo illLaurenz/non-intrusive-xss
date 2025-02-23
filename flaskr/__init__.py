@@ -1,6 +1,7 @@
 import os
 import psycopg2
 from flask import Flask
+from config import *
 
 
 def create_app(test_config=None):
@@ -8,9 +9,7 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         # a default secret that should be overridden by instance config
-        SECRET_KEY="dev",
-        # store the database in the instance folder
-        DATABASE=os.path.join(app.instance_path, "flaskr.sqlite"),
+        SECRET_KEY="dev"
     )
 
     if test_config is None:
@@ -27,11 +26,11 @@ def create_app(test_config=None):
         pass
 
     conn = psycopg2.connect(
-        host="localhost",
-        port="8080",
-        database="xss_db",
-        user="xss",
-        password="xss"
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS
     )
 
     @app.route("/submit/<identifier>")
@@ -46,7 +45,7 @@ def create_app(test_config=None):
             else:
                 cursor.execute("UPDATE xss_eval SET works = true WHERE id = %s", (identifier,))
         else:
-            cursor.execute("INSERT INTO xss_eval (id, payload, attacked_path, impact, works) VALUES (%s, %s, %s, %s)", (identifier, 'unknown payload', 'unknown path', 'unknown impact', True))
+            cursor.execute("INSERT INTO xss_eval (id, payload, attacked_path, works) VALUES (%s, %s, %s)", (identifier, 'unknown payload', 'unknown path', True))
         conn.commit()
         return "OK"
 
