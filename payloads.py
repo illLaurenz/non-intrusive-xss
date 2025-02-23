@@ -149,6 +149,10 @@ class Payload:
             string += token
         return string
 
+    def mutate(self):
+        # TODO
+        return [Payload() for _ in range(10)]
+
 def generate_payload(use_grammar:bool = True, length: int = None):
     if length is None:
         length = random.randint(1, 20)

