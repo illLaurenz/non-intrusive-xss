@@ -47,7 +47,7 @@ def create_app(test_config=None):
         else:
             cursor.execute("INSERT INTO xss_eval (id, payload, attacked_path, works) VALUES (%s, %s, %s)", (identifier, 'unknown payload', 'unknown path', True))
         conn.commit()
-        return "OK"
+        return "void();"
 
     @app.route("/results")
     def results():
