@@ -3,6 +3,7 @@ from bdb import effective
 from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
+from selenium.webdriver.common.options import PageLoadStrategy
 from seleniumwire import webdriver
 from payloads import *
 import psycopg2
@@ -34,10 +35,10 @@ def rate_structure_diff(diff: dict) -> float:
             return 0.1
     if "values_changed" in diff:
         if len(diff['values_changed']) != 0:
-            return 0.3
+            return 0.5
     if "iterable_item_added" in diff:
         if len(diff['iterable_item_added']) != 0:
-            return 0.6
+            return 0.8
     return 1
 
 def compare_images(img_str1, img_str2):
@@ -97,8 +98,8 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
         structural_diff_to_expected = compare_diffs(diff_payload, expected_diff)
         structural_score = rate_structure_diff(structural_diff_to_expected)
 
-        driver.save_screenshot("tmp/" + str(experiment_id) + ".png")
-        img_diff = compare_images("tmp/expected-2.png", "tmp/" + str(experiment_id) + ".png")
+        driver.save_screenshot("tmp/xss.png")
+        img_diff = compare_images("tmp/expected-2.png", "tmp/xss.png")
 
         img_score = 1
         if img_diff > 4 * expected_img_diff:
@@ -109,7 +110,7 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
         js_score = 1
         console_out = driver.get_log("browser")
         if len(console_out) != 0:
-            js_score = 0.1
+            js_score = 0.8 # TODO improve metric
 
         response_code_score = 1
         for req in reversed(driver.requests):
@@ -201,7 +202,3 @@ EXPERIMENT_FUNCTIONS = [xss_reflected_eval, xss_reflected_get_firstname] # TODO 
 
 if __name__ == '__main__':
     run(EXPERIMENT_FUNCTIONS, 10, 3)
-    #driver = webdriver.Chrome()
-    #payloads = [generate_payload() for _ in range(1, 50)]
-    #single_experiment(driver, payloads, xss_reflected_eval)
-    #experiment_on_function(driver, payloads, xss_reflected_get_firstname)

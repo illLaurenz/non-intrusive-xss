@@ -15,6 +15,7 @@ def firstname_xss(driver: webdriver, full_url: str, payload: str) -> str:
     driver.find_element(By.ID, "firstname").send_keys(payload)
     driver.find_element(By.ID, "lastname").send_keys("test")
     driver.find_element(By.NAME, 'form').click()
+    sleep(1)
     return driver.page_source
 
 def xss_reflected_get_firstname(driver: webdriver, URL: str, payload: str) -> str:
@@ -56,6 +57,7 @@ def xss_reflected_back_button(driver: webdriver, URL: str, payload: str) -> str:
     driver.request_interceptor = intercept_and_set_header
     driver.get(URL + path)
     driver.find_element(By.TAG_NAME, 'input').click()
+    sleep(1)
     html = driver.page_source
     driver.request_interceptor = None
     return html
@@ -66,6 +68,7 @@ def xss_reflected_custom_header(driver: webdriver, URL: str, payload: str) -> st
         request.headers["bWAPP"] = payload
     driver.request_interceptor = intercept_and_set_header
     driver.get(URL + path)
+    sleep(1)
     html = driver.page_source
     driver.request_interceptor = None
     return html
@@ -76,6 +79,7 @@ def xss_reflected_user_agent_header(driver: webdriver, URL: str, payload: str) -
         request.headers["User-Agent"] = payload
     driver.request_interceptor = intercept_and_set_header
     driver.get(URL + path)
+    sleep(1)
     html = driver.page_source
     driver.request_interceptor = None
     return html
@@ -86,6 +90,7 @@ def xss_reflected_referer_header(driver: webdriver, URL: str, payload: str) -> s
         request.headers["Referer"] = payload
     driver.request_interceptor = intercept_and_set_header
     driver.get(URL + path)
+    sleep(1)
     html = driver.page_source
     driver.request_interceptor = None
     return html
@@ -93,6 +98,7 @@ def xss_reflected_referer_header(driver: webdriver, URL: str, payload: str) -> s
 def xss_reflected_eval(driver: webdriver, URL: str, payload: str) -> str:
     path = "xss_eval.php"
     driver.get(URL + path + "?date=" + payload)
+    sleep(1)
     html = driver.page_source
     return html
 
@@ -100,6 +106,7 @@ def xss_reflected_eval(driver: webdriver, URL: str, payload: str) -> str:
 #def xss_reflected_href(driver: webdriver, URL: str, payload: str) -> str:
 #    path = "xss_href-1.php"
 #    driver.get(URL + path)
+#    sleep(1)
 #    html = driver.page_source
 #    return html
 
@@ -112,6 +119,7 @@ def xss_stored_blog(driver: webdriver, URL: str, payload: str) -> str:
     driver.get(URL + path)
     driver.find_element(By.ID, "entry").send_keys(payload)
     driver.find_element(By.NAME, 'blog').click()
+    sleep(1)
     html = driver.page_source
 
     # delete entry again to make the web app ready for another payload
