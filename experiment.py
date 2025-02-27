@@ -1,15 +1,14 @@
 import uuid
-from bdb import effective
 from typing import Callable
 from bs4 import BeautifulSoup
 from deepdiff import DeepDiff
-from selenium.webdriver.common.options import PageLoadStrategy
 from seleniumwire import webdriver
 from payloads import *
 import psycopg2
 import cv2
 import numpy as np
 from multiprocessing import Pool
+import sys
 
 from bwapp_selenium_actions import *
 
@@ -104,9 +103,9 @@ def experiment_on_function(payloads: list[Payload], experiment_function: Callabl
         img_diff = compare_images(f"tmp/expected-{experiment_function.__name__}-1.png", f"tmp/{experiment_function.__name__}-xss.png")
 
         img_score = 1
-        if img_diff > 4 * expected_img_diff:
+        if img_diff > IMAGE_DIFF_UPPER_THRESH * expected_img_diff:
             img_score = 0.1
-        if img_diff > 2 * expected_img_diff:
+        if img_diff > IMAGE_DIFF_LOWER_THRESH * expected_img_diff:
             img_score = 0.5
 
         js_score = 1
@@ -198,16 +197,14 @@ def find_best_payload_in_db():
             break
         print(f"Execution count: {payload[2]}, Score: {payload[1]}, Payload: {payload[0]}")
 
-def experiment_on_function_pool(pair_payl_func):
+def experiment_on_function_pool_wrapper(pair_payl_func):
     experiment_on_function(pair_payl_func[0], pair_payl_func[1])
 
 def run(experiment_functions: [Callable[[webdriver, str, str], str]], population_size: int = 50, iterations: int = 10):
     payload_population = [Payload() for _ in range(population_size)]
     for _ in range(iterations):
-        with Pool(PROCESS_COUNT) as p:
-            p.map(experiment_on_function_pool, [(payload_population.copy(), experiment_function) for experiment_function in experiment_functions])
-        #for func in experiment_functions:
-        #    experiment_on_function(driver, payload_population, func)
+        with Pool(MAX_PROCESS_COUNT) as p:
+            p.map(experiment_on_function_pool_wrapper, [(payload_population.copy(), experiment_function) for experiment_function in experiment_functions])
         candidates = evaluate_results(payload_population)
         payload_population = evolve_population(candidates, population_size)
     find_best_payload_in_db()
@@ -216,4 +213,10 @@ def run(experiment_functions: [Callable[[webdriver, str, str], str]], population
 EXPERIMENT_FUNCTIONS = [xss_reflected_eval, xss_reflected_get_firstname] # TODO add all
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        if len(sys.argv) < 3 or not (sys.argv[1].isnumeric() and sys.argv[2].isnumeric()):
+            print("USAGE: python3 experiment.py [population_size] [iterations]")
+            print("DEFAULT: population_size = 10, iterations = 3")
+        else:
+            run(EXPERIMENT_FUNCTIONS, int(sys.argv[1]), int(sys.argv[2]))
     run(EXPERIMENT_FUNCTIONS, 10, 3)
