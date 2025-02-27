@@ -1,4 +1,10 @@
+Start Flask:
 flask --app flaskr run --debug
+
+Open Postgres standard DB as Admin:
+sudo -u postgres psql template1
+
+Setup XSS Database:
 CREATE USER xss WITH CREATEDB PASSWORD 'xss';
 CREATE DATABASE xss_db OWNER = xss;
 

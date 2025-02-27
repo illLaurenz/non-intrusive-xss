@@ -9,6 +9,7 @@ from payloads import *
 import psycopg2
 import cv2
 import numpy as np
+from multiprocessing import Pool
 
 from bwapp_selenium_actions import *
 
@@ -46,8 +47,9 @@ def compare_images(img_str1, img_str2):
     img2 = cv2.imread(img_str2)
     return np.sum((img1 - img2) ** 2) # calc medium squared error
 
-def experiment_on_function(driver: webdriver, payloads: list[Payload], experiment_function: Callable[[webdriver, str, str], str]) -> any:
+def experiment_on_function(payloads: list[Payload], experiment_function: Callable[[webdriver, str, str], str]) -> any:
     # set login cookie for driver
+    driver = webdriver.Chrome()
     driver.maximize_window()
     login(driver, BWAPP_URL)
 
@@ -56,9 +58,9 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
     uuid_2 = str(uuid.uuid4())
     while uuid_1 == uuid_2: uuid_1 = str(uuid.uuid4())
     html_uuid_1 = experiment_function(driver, BWAPP_URL, uuid_1)
-    driver.save_screenshot("tmp/expected-1.png")
+    driver.save_screenshot(f"tmp/expected-{experiment_function.__name__}-1.png")
     html_uuid_2 = experiment_function(driver, BWAPP_URL, uuid_2)
-    driver.save_screenshot("tmp/expected-2.png")
+    driver.save_screenshot(f"tmp/expected-{experiment_function.__name__}-2.png")
 
     expected_response_code = None
     for req in reversed(driver.requests):
@@ -66,7 +68,7 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
             expected_response_code = req.response.status_code
             break
 
-    expected_img_diff = compare_images("tmp/expected-1.png", "tmp/expected-2.png")
+    expected_img_diff = compare_images(f"tmp/expected-{experiment_function.__name__}-1.png", f"tmp/expected-{experiment_function.__name__}-2.png")
 
     soup_uuid_1 = BeautifulSoup(html_uuid_1, "html.parser")
     soup_uuid_2 = BeautifulSoup(html_uuid_2, "html.parser")
@@ -98,8 +100,8 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
         structural_diff_to_expected = compare_diffs(diff_payload, expected_diff)
         structural_score = rate_structure_diff(structural_diff_to_expected)
 
-        driver.save_screenshot("tmp/xss.png")
-        img_diff = compare_images("tmp/expected-2.png", "tmp/xss.png")
+        driver.save_screenshot(f"tmp/{experiment_function.__name__}-xss.png")
+        img_diff = compare_images(f"tmp/expected-{experiment_function.__name__}-1.png", f"tmp/{experiment_function.__name__}-xss.png")
 
         img_score = 1
         if img_diff > 4 * expected_img_diff:
@@ -129,6 +131,7 @@ def experiment_on_function(driver: webdriver, payloads: list[Payload], experimen
                         overall_score, experiment_id)
                        )
         conn.commit()
+    driver.quit()
 
 
 def evaluate_results(payload_population):
@@ -148,24 +151,32 @@ def evaluate_results(payload_population):
         execution_count = cursor.fetchone()[0]
         effectivity = execution_count / experiment_count
 
-        print(payload, avg_score, effectivity)
         if effectivity > 0:
-            new_population.append(payload)
+            new_population.append({"avg_score": avg_score, "effectivity": effectivity, "payload": payload})
 
+    new_population.sort(key=lambda x: x["avg_score"], reverse=True)
+    new_population.sort(key=lambda x: x["effectivity"], reverse=True)
+    if VERBOSE:
+        print("------- Best Payloads in Iteration ---------")
+        print(new_population)
+        print("----- END Best Payloads in Iteration -------")
     return new_population
 
 def evolve_population(candidates: [Payload], population_size: int):
     new_gen = []
-    for candidate in candidates:
-        for _ in range(3):
-            child = candidate.copy()
+    for index, candidate in enumerate(candidates):
+        mutation_count = MUTATION_RATE * SUCCESS_FACTOR if index < population_size * SUCCESS_THRESHOLD else MUTATION_RATE
+        for _ in range(mutation_count):
+            child = candidate["payload"].copy()
             child.mutate()
             new_gen.append(child)
-    for parent1 in candidates:
+    for index, parent1 in enumerate(candidates):
+        child_count = REPRODUCTION_RATE * SUCCESS_FACTOR if index < population_size * SUCCESS_THRESHOLD else REPRODUCTION_RATE
         for parent2 in candidates:
-            if parent1 != parent2:
-                new_gen.append(cross_payloads(parent1, parent2))
-                new_gen.append(cross_payloads(parent2, parent1))
+            if parent1["payload"] != parent2["payload"]:
+                for _ in range(child_count):
+                    new_gen.append(cross_payloads(parent1["payload"], parent2["payload"]))
+                    new_gen.append(cross_payloads(parent2["payload"], parent1["payload"]))
     for _ in range(population_size):
         new_gen.append(generate_payload())
 
@@ -187,12 +198,16 @@ def find_best_payload_in_db():
             break
         print(f"Execution count: {payload[2]}, Score: {payload[1]}, Payload: {payload[0]}")
 
+def experiment_on_function_pool(pair_payl_func):
+    experiment_on_function(pair_payl_func[0], pair_payl_func[1])
+
 def run(experiment_functions: [Callable[[webdriver, str, str], str]], population_size: int = 50, iterations: int = 10):
     payload_population = [Payload() for _ in range(population_size)]
-    driver = webdriver.Chrome()
     for _ in range(iterations):
-        for func in experiment_functions:
-            experiment_on_function(driver, payload_population, func)
+        with Pool(PROCESS_COUNT) as p:
+            p.map(experiment_on_function_pool, [(payload_population.copy(), experiment_function) for experiment_function in experiment_functions])
+        #for func in experiment_functions:
+        #    experiment_on_function(driver, payload_population, func)
         candidates = evaluate_results(payload_population)
         payload_population = evolve_population(candidates, population_size)
     find_best_payload_in_db()
